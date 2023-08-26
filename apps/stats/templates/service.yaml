@@ -1,0 +1,18 @@
+{{- $chartName := .Chart.Name -}}
+  {{- range .Values.deployments }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $chartName }}-{{ .name }}
+  labels:
+    app: {{ $chartName }}
+spec:
+  ports:
+    - port: {{ .port }}
+      targetPort: {{ .port }}
+      protocol: TCP
+      name: http
+  selector:
+    app: {{ $chartName }}-{{ .name }}
+  {{- end }}

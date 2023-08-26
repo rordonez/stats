@@ -88,3 +88,14 @@ the infrastructure it uses. This is the case for this exercise, the [main file](
 module invocation to configure the ECS service and Task. By default it defines a load balancer for each service, it is
 out of the scope of this exercise to add logic to define more complex services. Inputs for the module have been defined
 for different [environments](tf/environments).
+
+# Task 3 - Get it to work with Kubernetes and fluxCD
+For this task I have defined another Github [workflow](.github/workflows/flux.yaml). I have created a Kubernetes cluster
+with 3 nodes using [Kind](https://kind.sigs.k8s.io/). I am not very familiar with Fluxcd, but I managed to create a
+[HelmRelease](clusters/app.yaml) application using a self-host Husing a self-host Helm [chart](apps/stats)
+
+This Helm chart defines a couple of deployments, service and ingress controller to expose the application to port 80.
+I could have used `Kustomization` instead to reduce the complexity of handling templates, but I am not familiar with the
+library. That would have helped me to configure the application to be ran on different environments. For simplicity, I
+have not added configurations for several environments for this exercise.
+

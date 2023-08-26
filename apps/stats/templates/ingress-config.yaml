@@ -1,0 +1,24 @@
+{{- $chartName := .Chart.Name -}}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $chartName }}-ingress
+  labels:
+    app: {{ $chartName }}
+spec:
+  ingressClassName: nginx
+  rules:
+    {{- range .Values.deployments | uniq -}}
+      {{- if eq .name "frontend" }}
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ $chartName }}-{{ .name }}
+            port:
+              number: {{ .port }}
+      {{- end }}
+    {{- end}}

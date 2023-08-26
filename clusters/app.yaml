@@ -1,0 +1,26 @@
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: stats
+  namespace: flux-system
+spec:
+  interval: 1m
+  chart:
+    spec:
+      chart: ./apps/stats
+      sourceRef:
+        kind: GitRepository
+        name: flux-system
+  values:
+    deployments:
+      - name: frontend
+        image: 478200436028.dkr.ecr.us-east-1.amazonaws.com/stats-frontend
+        env:
+          REACT_APP_BACKEND_SERVICE_URL: http://stats-backend:8080
+        port: 3000
+      - name: backend
+        image: 478200436028.dkr.ecr.us-east-1.amazonaws.com/stats-backend
+        port: 8080
+  install:
+    createNamespace: true
+  targetNamespace: stats

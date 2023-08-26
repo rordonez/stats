@@ -1,0 +1,74 @@
+name: FluxCD
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  TERRAFORM_VERSION : 1.5.4
+  AWS_REGION: us-east-1
+  APP: stats
+
+permissions:
+  id-token: write   # This is required for requesting the JWT
+  contents: read    # This is required for actions/checkout
+
+jobs:
+  fluxcd:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Git clone the repository
+        uses: actions/checkout@v3
+
+      - name: Provision Cluster with 2 worker nodes
+        run: kind create cluster --name cluster --config workflow-configs/kind-cluster.yaml
+
+      - name: Verify Cluster
+        run: |
+          export KUBECONFIG="$(kind get kubeconfig-path --name=my-cluster)"
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Configure kinD Nginx ingress
+        run: kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+
+      - name: Wait for Nginx Ingress Controller
+        run: |
+          kubectl wait --namespace ingress-nginx \
+          --for=condition=ready pod \
+          --selector=app.kubernetes.io/component=controller \
+          --timeout=30s
+
+      - name: Setup Flux
+        uses: fluxcd/flux2/action@main
+
+      - name: Install Flux in Kubernetes Kind
+        run: flux install
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::478200436028:role/github-action-assume-role-with-action
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+        with:
+          mask-password: 'true'
+
+      - name: Configure kind to use ECR
+        run: |
+          kubectl create namespace $APP
+          kubectl create secret generic regcred \
+              --from-file=.dockerconfigjson=$(echo $HOME)/.docker/config.json \
+              --type=kubernetes.io/dockerconfigjson -n $APP
+
+      - name: Setup cluster reconciliation
+        run: |
+          flux create source git flux-system \
+          --url=${{ github.event.repository.html_url }} \
+          --branch=${GITHUB_REF#refs/heads/}
+          kubectl apply -f clusters

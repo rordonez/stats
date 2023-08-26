@@ -1,0 +1,36 @@
+{{- $chartName := .Chart.Name -}}
+  {{- range .Values.deployments }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .name }}-deployment
+  labels:
+    app: {{ $chartName }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ $chartName }}-{{ .name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $chartName }}-{{ .name }}
+    spec:
+      containers:
+          - name: {{ .name }}
+            image: {{ .image }}
+            env:
+            {{- range $k, $v := .env }}
+                - name: {{ $k }}
+                  value: {{ $v }}
+            {{- end }}
+            livenessProbe:
+              httpGet:
+                path: /health
+                port: {{ .port }}
+              initialDelaySeconds: 15
+              periodSeconds: 10
+      imagePullSecrets:
+        - name: regcred
+  {{- end }}
