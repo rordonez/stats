@@ -1,0 +1,87 @@
+name: Terraform reusable workflow
+
+on:
+  workflow_call:
+    inputs:
+      terraform-version:
+        required: true
+        type: string
+      terraform-directory:
+        required: true
+        type: string
+      # Path is relative to terraform-directory
+      terraform-variables-path:
+        required: false
+        type: string
+        default: "."
+      terraform-variables:
+        required: false
+        default: ""
+        type: string
+    outputs:
+      terraform-outputs:
+        description: Terraform outputs
+        value: ${{ jobs.ProvisionWithTerraform.outputs.terraform-outputs }}
+
+env:
+  WEB_IDENTITY_TOKEN_FILE : /tmp/web_identity_token_file
+  TERRAFORM_VARIABLES_FILE : ${{ inputs.terraform-variables-path }}/terraform.tfvars
+  TERRAFORM_VARIABLES : ${{ inputs.terraform-variables != '' && format('-var {0}', inputs.terraform-variables) || '' }}
+jobs:
+  ProvisionWithTerraform:
+    runs-on: ubuntu-latest
+    outputs:
+      terraform-outputs: ${{ steps.external.outputs.all }}
+    steps:
+      - name: Git clone the repository
+        uses: actions/checkout@v3
+
+      - name: Get OIDC Token
+        id: get_oidc_token
+        run: |
+          curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+          "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | \
+          jq -r '.value' > $WEB_IDENTITY_TOKEN_FILE
+
+      - name: Setup AWS credentials file
+        run: |
+          mkdir -p ~/.aws
+          cp credentials.aws ~/.aws/credentials
+          touch ~/.aws/config
+
+      - name: Check current AWS configuration
+        run: |
+          aws sts get-caller-identity || echo "[OK] - No AWS credentials found!"
+          (env | grep AWS_) || echo "[OK] - No AWS environment variables present!"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_wrapper: false
+          terraform_version: ${{ inputs.terraform-version }}
+
+      - run: terraform init
+        working-directory: ${{ inputs.terraform-directory }}
+
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate -no-color
+        working-directory: ${{ inputs.terraform-directory }}
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -no-color -var-file=$TERRAFORM_VARIABLES_FILE $TERRAFORM_VARIABLES
+        working-directory: ${{ inputs.terraform-directory }}
+
+      - name: Terraform Apply
+        id: apply
+        run: terraform apply -no-color -auto-approve -var-file=$TERRAFORM_VARIABLES_FILE $TERRAFORM_VARIABLES
+        working-directory: ${{ inputs.terraform-directory }}
+
+      - name: Save terraform outputs
+        id: external
+        working-directory: ${{ inputs.terraform-directory }}
+        run: |
+          all=$(terraform output -json | jq -c .)
+          echo "all=$all" >> $GITHUB_OUTPUT
+
